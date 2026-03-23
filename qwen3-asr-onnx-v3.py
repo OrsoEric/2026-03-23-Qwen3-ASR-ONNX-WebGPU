@@ -11,6 +11,8 @@ Fixes:
 
 #python qwen3-asr-onnx-v3.py "D:\Data\Project\Project-LLM\Audio Samples\SAMPLE-Ranni-18s.wav" "D:\Data\Project\Project-LLM\Audio Samples\SAMPLE-british-man-7s.wav"  --onnx-dir "D:\LLM_Models\Qwen\Qwen3-ASR-0.6B-ONNX-CPU"
 
+#python qwen3-asr-onnx-v3.py "D:\Data\Project\Project-LLM\Audio Samples\SAMPLE-british-man-7s.wav"  --onnx-dir "D:\LLM_Models\Qwen\Qwen3-ASR-0.6B-ONNX-CPU"
+
 import argparse
 import time
 from pathlib import Path
@@ -41,9 +43,9 @@ HIDDEN_SIZE = 1024
 
 C_X_ENABLE_PROFILER = False
 
-C_S_EXECUTION_PROVIDER = "WebGpuExecutionProvider"
+#C_S_EXECUTION_PROVIDER = "WebGpuExecutionProvider"
 
-#C_S_EXECUTION_PROVIDER = "CPUExecutionProvider"
+C_S_EXECUTION_PROVIDER = "CPUExecutionProvider"
 
 # ── Audio ─────────────────────────────────────────────
 
@@ -96,39 +98,41 @@ class Pipeline:
 
         base = Path(onnx_dir) / "onnx_models"
 
-        self.enc_conv = ort.InferenceSession(
-            str(base / "encoder_conv.onnx"),
-            opts,
-            providers=[C_S_EXECUTION_PROVIDER]
-        )
+        self.enc_conv = Pipeline._load_onnx( base / "encoder_conv.onnx", opts )
+        
+        self.enc_tr = Pipeline._load_onnx( base / "encoder_transformer.onnx", opts )
+        
+        self.dec_init = Pipeline._load_onnx( base / "decoder_init.int8.onnx", opts )
+        
+        self.cl_onnx_dec_step = Pipeline._load_onnx( base / "decoder_step.int8.onnx", opts )
 
-        self.enc_tr = ort.InferenceSession(
-            str(base / "encoder_transformer.onnx"),
-            opts,
-            providers=[C_S_EXECUTION_PROVIDER]
-        )
-
-        self.dec_init = ort.InferenceSession(
-            str(base / "decoder_init.int8.onnx"),
-            opts,
-            providers=[C_S_EXECUTION_PROVIDER]
-        )
-
-        self.dec_step = ort.InferenceSession(
-            str(base / "decoder_step.int8.onnx"),
-            opts,
-            providers=[C_S_EXECUTION_PROVIDER]
-        )
-
-        self.embed = np.fromfile(
+        self.ann_embed = np.fromfile(
             str(base / "embed_tokens.bin"),
             dtype=np.float32
         ).reshape(VOCAB_SIZE, HIDDEN_SIZE)
 
-        self.tk = SimpleTokenizer(str(Path(onnx_dir) / "tokenizer.json"))
-        self.mel_filters = get_mel_filters()
+        self.cl_tokenizer = SimpleTokenizer(str(Path(onnx_dir) / "tokenizer.json"))
+        self.cl_mel_filters = get_mel_filters()
 
         self._attn_cache = None
+
+    @staticmethod
+    def _load_onnx(i_s_onnx_path : Path, i_st_onnx_options : ort.SessionOptions ) -> ort.InferenceSession:
+        
+        if i_s_onnx_path.exists() == False:
+            raise Exception(f"cannot find {i_s_onnx_path}")
+        else:
+            n_size = i_s_onnx_path.stat().st_size
+            print(f"Loading {i_s_onnx_path.stem} | ({ n_size / 1e6:.0f} MB)...")
+            
+        cl_onnx_model = ort.InferenceSession(
+            str(i_s_onnx_path),
+            i_st_onnx_options,
+            providers=[C_S_EXECUTION_PROVIDER]
+        )
+        
+        return cl_onnx_model
+        
 
     # ── IO Binding ─────────────────────────────
 
@@ -170,9 +174,9 @@ class Pipeline:
     # ── Prompt ────────────────────────────────
 
     def build_prompt(self, n_audio, language: Optional[str] = None):
-        ids = [IM_START_ID] + self.tk.encode("system") + [NEWLINE_ID, IM_END_ID, NEWLINE_ID]
+        ids = [IM_START_ID] + self.cl_tokenizer.encode("system") + [NEWLINE_ID, IM_END_ID, NEWLINE_ID]
 
-        ids += [IM_START_ID] + self.tk.encode("user") + [NEWLINE_ID]
+        ids += [IM_START_ID] + self.cl_tokenizer.encode("user") + [NEWLINE_ID]
 
         ids += [AUDIO_START_ID]
         ids += [AUDIO_PAD_ID] * n_audio
@@ -180,16 +184,16 @@ class Pipeline:
 
         ids += [IM_END_ID, NEWLINE_ID]
 
-        ids += [IM_START_ID] + self.tk.encode("assistant") + [NEWLINE_ID]
+        ids += [IM_START_ID] + self.cl_tokenizer.encode("assistant") + [NEWLINE_ID]
 
         if language:
-            ids += self.tk.encode(f"language {language}<asr_text>")
+            ids += self.cl_tokenizer.encode(f"language {language}<asr_text>")
 
         return ids
 
     def embed_inputs(self, ids, audio):
         arr = np.array(ids)
-        emb = self.embed[arr]
+        emb = self.ann_embed[arr]
         emb[arr == AUDIO_PAD_ID] = audio
         return emb[np.newaxis, :, :]
 
@@ -204,7 +208,7 @@ class Pipeline:
 
         # MEL
         t0 = time.time()
-        mel = compute_mel(wav, self.mel_filters)
+        mel = compute_mel(wav, self.cl_mel_filters)
         t_mel = time.time() - t0
 
         # ENCODER
@@ -240,10 +244,10 @@ class Pipeline:
             if next_token in (IM_END_ID, ENDOFTEXT_ID):
                 break
 
-            token_embed[0,0] = self.embed[next_token]
+            token_embed[0,0] = self.ann_embed[next_token]
             pos_buf[0,0] = cur
 
-            logits, k, v = self._run(self.dec_step, {
+            logits, k, v = self._run(self.cl_onnx_dec_step, {
                 "input_embeds": token_embed,
                 "position_ids": pos_buf,
                 "past_keys": k,
@@ -260,7 +264,7 @@ class Pipeline:
         if generated and generated[-1] in (IM_END_ID, ENDOFTEXT_ID):
             generated = generated[:-1]
 
-        raw = self.tk.decode(generated)
+        raw = self.cl_tokenizer.decode(generated)
 
         # parse language output
         parsed_lang = ""
@@ -297,7 +301,7 @@ class Pipeline:
         }
 
     def save_profiles(self):
-        for s in [self.enc_conv, self.enc_tr, self.dec_init, self.dec_step]:
+        for s in [self.enc_conv, self.enc_tr, self.dec_init, self.cl_onnx_dec_step]:
             print("Profile:", s.end_profiling())
 
 # ── CLI ─────────────────────────────────────────────
