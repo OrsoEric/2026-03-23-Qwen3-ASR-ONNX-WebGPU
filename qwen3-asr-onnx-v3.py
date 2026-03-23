@@ -16,7 +16,7 @@ Fixes:
 import argparse
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 import onnxruntime as ort
@@ -88,6 +88,26 @@ class SimpleTokenizer:
 # ── Pipeline ──────────────────────────────────────────
 
 class Pipeline:
+    """
+    End‑to‑end inference pipeline for the Qwen3-ASR ONNX model.
+
+    The pipeline is split into four stages:
+
+    1. **Encoder** – transforms a Mel spectrogram into high‑level audio features.
+       It consists of a lightweight convolution block followed by a transformer
+       encoder that operates in blocks to allow caching.
+    2. **Prompt construction** – builds the token sequence that precedes the actual
+       transcription.  This includes system, user and assistant messages as well
+       as language hints when requested.
+    3. **Decoder pre‑fill** – runs the decoder once over the entire prompt to
+       initialise its key/value caches.  The output of this step is a set of
+       ``past_keys``/``past_values`` that are reused during generation.
+    4. **Decoding loop** – greedily generates tokens up to a maximum length
+       or until an end‑of‑text token is produced.
+
+    Each stage uses the same low‑level :func:`_run` helper that performs I/O
+    binding with ONNX Runtime for optimal performance on CPU.
+    """
 
     def __init__(self, i_s_onnx_dir : str):
         """
@@ -109,26 +129,42 @@ class Pipeline:
 
         s_onnx_path_model = Path(i_s_onnx_dir) / "onnx_models"
 
-        self.cl_onnx_encoder_convolution = Pipeline._load_onnx( s_onnx_path_model / "encoder_conv.onnx", st_onnx_options )
-        
-        self.cl_onnx_encoder_transformer = Pipeline._load_onnx( s_onnx_path_model / "encoder_transformer.onnx", st_onnx_options )
-        
-        self.cl_onnx_decoder_init = Pipeline._load_onnx( s_onnx_path_model / "decoder_init.int8.onnx", st_onnx_options )
-        
-        self.cl_onnx_decoder_step = Pipeline._load_onnx( s_onnx_path_model / "decoder_step.int8.onnx", st_onnx_options )
+        t_load_time : float = 0.0
 
+        self.cl_onnx_encoder_convolution, t_elapsed = Pipeline._load_onnx( s_onnx_path_model / "encoder_conv.onnx", st_onnx_options )
+        t_load_time += t_elapsed
+        
+        self.cl_onnx_encoder_transformer, t_elapsed = Pipeline._load_onnx( s_onnx_path_model / "encoder_transformer.onnx", st_onnx_options )
+        t_load_time += t_elapsed
+        
+        self.cl_onnx_decoder_init, t_elapsed = Pipeline._load_onnx( s_onnx_path_model / "decoder_init.int8.onnx", st_onnx_options )
+        t_load_time += t_elapsed
+        
+        self.cl_onnx_decoder_step, t_elapsed = Pipeline._load_onnx( s_onnx_path_model / "decoder_step.int8.onnx", st_onnx_options )
+        t_load_time += t_elapsed
+
+        t_now = time.time()
         self.ann_embed = np.fromfile(
             str(s_onnx_path_model / "embed_tokens.bin"),
             dtype=np.float32
         ).reshape(VOCAB_SIZE, HIDDEN_SIZE)
+        t_elapsed = time.time() -t_now
+        print(f"loaded embed tokens bin in {t_elapsed:.3f} [s]")
+        t_load_time += t_elapsed
 
+        t_now = time.time()
         self.cl_tokenizer = SimpleTokenizer(str(Path(i_s_onnx_dir) / "tokenizer.json"))
         self.cl_mel_filters = get_mel_filters()
+        t_elapsed = time.time() -t_now
+        print(f"loaded tokenizer {t_elapsed:.3f} [s]")
+        t_load_time += t_elapsed
+
+        print(f"LOADED ALL MODELS IN {t_load_time:.3f}")
 
         self._attn_cache = None
 
     @staticmethod
-    def _load_onnx(i_s_onnx_path : Path, i_st_onnx_options : ort.SessionOptions ) -> ort.InferenceSession:
+    def _load_onnx(i_s_onnx_path : Path, i_st_onnx_options : ort.SessionOptions ) -> Tuple[ort.InferenceSession, float]:
         """
         Load an ONNX model and create an inference session.
 
@@ -163,11 +199,11 @@ class Pipeline:
             i_st_onnx_options,
             providers=[C_S_EXECUTION_PROVIDER]
         )
-        t_end = time.time()
-        print(f"Loaded in {t_end-t_start:.2f} [s] ")
+        t_elapsed = time.time() -t_start
+        print(f"Loaded in {t_elapsed:.3f} [s] ")
         
 
-        return cl_onnx_model
+        return (cl_onnx_model, t_elapsed)
         
     # ── IO Binding ─────────────────────────────
 
