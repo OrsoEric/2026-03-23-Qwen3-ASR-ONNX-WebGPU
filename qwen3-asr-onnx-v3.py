@@ -135,16 +135,16 @@ class Pipeline:
         
     # ── IO Binding ─────────────────────────────
 
-    def _run(self, i_cl_sess, inputs):
-        io = i_cl_sess.io_binding()
+    def _run(self, i_cl_session, i_aan_input):
+        io = i_cl_session.io_binding()
 
-        for k, v in inputs.items():
+        for k, v in i_aan_input.items():
             io.bind_ortvalue_input(k, ort.OrtValue.ortvalue_from_numpy(v))
 
-        for o in i_cl_sess.get_outputs():
+        for o in i_cl_session.get_outputs():
             io.bind_output(o.name)
 
-        i_cl_sess.run_with_iobinding(io)
+        i_cl_session.run_with_iobinding(io)
         return io.copy_outputs_to_cpu()
 
     # ── Encoder ────────────────────────────────
