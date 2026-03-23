@@ -98,13 +98,13 @@ class Pipeline:
 
         s_onnx_path_model = Path(i_s_onnx_dir) / "onnx_models"
 
-        self.enc_conv = Pipeline._load_onnx( s_onnx_path_model / "encoder_conv.onnx", st_onnx_options )
+        self.cl_onnx_encoder_convolution = Pipeline._load_onnx( s_onnx_path_model / "encoder_conv.onnx", st_onnx_options )
         
-        self.enc_tr = Pipeline._load_onnx( s_onnx_path_model / "encoder_transformer.onnx", st_onnx_options )
+        self.cl_onnx_encoder_transformer = Pipeline._load_onnx( s_onnx_path_model / "encoder_transformer.onnx", st_onnx_options )
         
-        self.dec_init = Pipeline._load_onnx( s_onnx_path_model / "decoder_init.int8.onnx", st_onnx_options )
+        self.cl_onnx_decoder_init = Pipeline._load_onnx( s_onnx_path_model / "decoder_init.int8.onnx", st_onnx_options )
         
-        self.cl_onnx_dec_step = Pipeline._load_onnx( s_onnx_path_model / "decoder_step.int8.onnx", st_onnx_options )
+        self.cl_onnx_decoder_step = Pipeline._load_onnx( s_onnx_path_model / "decoder_step.int8.onnx", st_onnx_options )
 
         self.ann_embed = np.fromfile(
             str(s_onnx_path_model / "embed_tokens.bin"),
@@ -139,7 +139,7 @@ class Pipeline:
         io = i_cl_session.io_binding()
 
         for k, v in i_aan_input.items():
-            io.bind_ortvalue_input(k, ort.OrtValue.ortvalue_from_numpy(v))
+            io.bind_ortvalue_input(k, ort.OrtValue.ortvalue_from_numpy(v) )
 
         for o in i_cl_session.get_outputs():
             io.bind_output(o.name)
@@ -153,7 +153,10 @@ class Pipeline:
         t0 = time.time()
 
         x = mel[np.newaxis, np.newaxis, :, :]
-        conv = self._run(self.enc_conv, {"padded_mel_chunks": x})[0]
+        conv = self._run(
+            self.cl_onnx_encoder_convolution,
+            {"padded_mel_chunks": x}
+        )[0]
 
         hidden = conv[0]
         T = hidden.shape[0]
@@ -163,7 +166,7 @@ class Pipeline:
 
         attn = self._attn_cache[:, :, :T, :T]
 
-        out = self._run(self.enc_tr, {
+        out = self._run(self.cl_onnx_encoder_transformer, {
             "hidden_states": hidden,
             "attention_mask": attn
         })[0]
@@ -202,12 +205,12 @@ class Pipeline:
 
         total_start = time.time()
 
-        wav = load_audio(path)
-        duration = len(wav) / SAMPLE_RATE
+        an_wav = load_audio(path)
+        n_duration_s = len(an_wav) / SAMPLE_RATE
 
         # MEL
         t0 = time.time()
-        mel = compute_mel(wav, self.cl_mel_filters)
+        mel = compute_mel(an_wav, self.cl_mel_filters)
         t_mel = time.time() - t0
 
         # ENCODER
@@ -222,7 +225,7 @@ class Pipeline:
 
         # PREFILL
         t0 = time.time()
-        logits, k, v = self._run(self.dec_init, {
+        logits, k, v = self._run(self.cl_onnx_decoder_init, {
             "input_embeds": emb,
             "position_ids": pos
         })
@@ -246,7 +249,7 @@ class Pipeline:
             token_embed[0,0] = self.ann_embed[next_token]
             pos_buf[0,0] = cur
 
-            logits, k, v = self._run(self.cl_onnx_dec_step, {
+            logits, k, v = self._run(self.cl_onnx_decoder_step, {
                 "input_embeds": token_embed,
                 "position_ids": pos_buf,
                 "past_keys": k,
@@ -280,7 +283,7 @@ class Pipeline:
 
         tokens = len(generated)
         tps = tokens / t_decode if t_decode > 0 else 0
-        rtf = total_time / duration
+        rtf = total_time / n_duration_s
 
         return {
             "text": parsed_text.strip(),
@@ -292,7 +295,7 @@ class Pipeline:
                 "prefill_s": t_prefill,
                 "decode_s": t_decode,
                 "total_s": total_time,
-                "audio_duration_s": duration,
+                "audio_duration_s": n_duration_s,
                 "rtf": rtf,
                 "tokens": tokens,
                 "tps": tps,
@@ -300,7 +303,7 @@ class Pipeline:
         }
 
     def save_profiles(self):
-        for s in [self.enc_conv, self.enc_tr, self.dec_init, self.cl_onnx_dec_step]:
+        for s in [self.cl_onnx_encoder_convolution, self.cl_onnx_encoder_transformer, self.cl_onnx_decoder_init, self.cl_onnx_decoder_step]:
             print("Profile:", s.end_profiling())
 
 # ── CLI ─────────────────────────────────────────────
