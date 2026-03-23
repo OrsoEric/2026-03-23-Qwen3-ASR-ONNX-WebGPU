@@ -47,6 +47,8 @@ C_X_ENABLE_PROFILER = False
 
 C_S_EXECUTION_PROVIDER = "CPUExecutionProvider"
 
+C_N_MAX_TOKENS = 512
+
 # ── Audio ─────────────────────────────────────────────
 
 def load_audio(path):
@@ -119,18 +121,29 @@ class Pipeline:
     @staticmethod
     def _load_onnx(i_s_onnx_path : Path, i_st_onnx_options : ort.SessionOptions ) -> ort.InferenceSession:
         
+
         if i_s_onnx_path.exists() == False:
             raise Exception(f"cannot find {i_s_onnx_path}")
-        else:
-            n_size = i_s_onnx_path.stat().st_size
-            print(f"Loading {i_s_onnx_path.stem} | ({ n_size / 1e6:.0f} MB)...")
-            
+        
+        n_size = i_s_onnx_path.stat().st_size
+        #if it's very small, there might be a .data file with the actual weights
+        if n_size < 1000000:
+            s_onnx_path_data :Path = i_s_onnx_path.with_name(i_s_onnx_path.name + ".data")
+            if s_onnx_path_data.exists() == True:
+                n_size = s_onnx_path_data.stat().st_size
+                
+        print(f"Loading {i_s_onnx_path.stem} | ({ n_size / 1e6:.0f} [MB])...")
+        
+        t_start = time.time()
         cl_onnx_model = ort.InferenceSession(
             str(i_s_onnx_path),
             i_st_onnx_options,
             providers=[C_S_EXECUTION_PROVIDER]
         )
+        t_end = time.time()
+        print(f"Loaded in {t_end-t_start:.2f} [s] ")
         
+
         return cl_onnx_model
         
     # ── IO Binding ─────────────────────────────
@@ -242,7 +255,7 @@ class Pipeline:
 
         cur = emb.shape[1]
 
-        for _ in range(512):
+        for _ in range(C_N_MAX_TOKENS):
             if next_token in (IM_END_ID, ENDOFTEXT_ID):
                 break
 
@@ -315,10 +328,11 @@ def main():
     p.add_argument("--language", default=None)
     args = p.parse_args()
 
-    pipe = Pipeline(args.onnx_dir)
+    #load the models
+    cl_pipeline = Pipeline(args.onnx_dir)
 
     for f in args.audio:
-        res = pipe.transcribe(f, args.language)
+        res = cl_pipeline.transcribe(f, args.language)
         t = res["timing"]
 
         print(f"\n[{f}] ({t['audio_duration_s']:.1f}s, RTF {t['rtf']:.2f})")
@@ -338,7 +352,7 @@ def main():
         )
         
     if C_X_ENABLE_PROFILER:
-        pipe.save_profiles()
+        cl_pipeline.save_profiles()
 
 if __name__ == "__main__":
     main()
