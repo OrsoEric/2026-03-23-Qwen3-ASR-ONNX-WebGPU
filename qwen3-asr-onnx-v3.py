@@ -87,31 +87,31 @@ class SimpleTokenizer:
 
 class Pipeline:
 
-    def __init__(self, onnx_dir):
+    def __init__(self, i_s_onnx_dir : str):
 
-        opts = ort.SessionOptions()
-        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        st_onnx_options = ort.SessionOptions()
+        st_onnx_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
         # profiling
-        opts.enable_profiling = C_X_ENABLE_PROFILER
-        opts.profile_file_prefix = "onnxruntime_profile"
+        st_onnx_options.enable_profiling = C_X_ENABLE_PROFILER
+        st_onnx_options.profile_file_prefix = "onnxruntime_profile"
 
-        base = Path(onnx_dir) / "onnx_models"
+        s_onnx_path_model = Path(i_s_onnx_dir) / "onnx_models"
 
-        self.enc_conv = Pipeline._load_onnx( base / "encoder_conv.onnx", opts )
+        self.enc_conv = Pipeline._load_onnx( s_onnx_path_model / "encoder_conv.onnx", st_onnx_options )
         
-        self.enc_tr = Pipeline._load_onnx( base / "encoder_transformer.onnx", opts )
+        self.enc_tr = Pipeline._load_onnx( s_onnx_path_model / "encoder_transformer.onnx", st_onnx_options )
         
-        self.dec_init = Pipeline._load_onnx( base / "decoder_init.int8.onnx", opts )
+        self.dec_init = Pipeline._load_onnx( s_onnx_path_model / "decoder_init.int8.onnx", st_onnx_options )
         
-        self.cl_onnx_dec_step = Pipeline._load_onnx( base / "decoder_step.int8.onnx", opts )
+        self.cl_onnx_dec_step = Pipeline._load_onnx( s_onnx_path_model / "decoder_step.int8.onnx", st_onnx_options )
 
         self.ann_embed = np.fromfile(
-            str(base / "embed_tokens.bin"),
+            str(s_onnx_path_model / "embed_tokens.bin"),
             dtype=np.float32
         ).reshape(VOCAB_SIZE, HIDDEN_SIZE)
 
-        self.cl_tokenizer = SimpleTokenizer(str(Path(onnx_dir) / "tokenizer.json"))
+        self.cl_tokenizer = SimpleTokenizer(str(Path(i_s_onnx_dir) / "tokenizer.json"))
         self.cl_mel_filters = get_mel_filters()
 
         self._attn_cache = None
@@ -133,19 +133,18 @@ class Pipeline:
         
         return cl_onnx_model
         
-
     # ── IO Binding ─────────────────────────────
 
-    def _run(self, sess, inputs):
-        io = sess.io_binding()
+    def _run(self, i_cl_sess, inputs):
+        io = i_cl_sess.io_binding()
 
         for k, v in inputs.items():
             io.bind_ortvalue_input(k, ort.OrtValue.ortvalue_from_numpy(v))
 
-        for o in sess.get_outputs():
+        for o in i_cl_sess.get_outputs():
             io.bind_output(o.name)
 
-        sess.run_with_iobinding(io)
+        i_cl_sess.run_with_iobinding(io)
         return io.copy_outputs_to_cpu()
 
     # ── Encoder ────────────────────────────────
