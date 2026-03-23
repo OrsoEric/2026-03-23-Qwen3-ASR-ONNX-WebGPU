@@ -76,21 +76,30 @@ def compute_mel(wav, mel_filters):
 # ── Tokenizer ─────────────────────────────────────────
 
 class SimpleTokenizer:
-    def __init__(self, path):
-        self.tk = Tokenizer.from_file(path)
+    def __init__(self, i_s_path_tokenizer : Path ):
+        self.cl_tokenizer = Tokenizer.from_file(i_s_path_tokenizer)
 
-    def encode(self, t):
-        return self.tk.encode(t).ids
+    def encode(self, i_an_input):
+        return self.cl_tokenizer.encode(i_an_input).ids
 
-    def decode(self, ids):
-        return self.tk.decode(ids, skip_special_tokens=True)
+    def decode(self, i_an_tokens):
+        return self.cl_tokenizer.decode(i_an_tokens, skip_special_tokens=True)
 
 # ── Pipeline ──────────────────────────────────────────
 
 class Pipeline:
 
     def __init__(self, i_s_onnx_dir : str):
+        """
+        Load all required models and resources from the supplied directory.
 
+        Parameters
+        ----------
+        i_s_onnx_dir : str
+            Root path that contains an ``onnx_models`` folder with the four ONNX files,
+            a binary embedding file and the tokenizer JSON.
+        """
+        
         st_onnx_options = ort.SessionOptions()
         st_onnx_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
@@ -120,7 +129,21 @@ class Pipeline:
 
     @staticmethod
     def _load_onnx(i_s_onnx_path : Path, i_st_onnx_options : ort.SessionOptions ) -> ort.InferenceSession:
-        
+        """
+        Load an ONNX model and create an inference session.
+
+        Parameters
+        ----------
+        i_s_path : Path
+            File system path to the .onnx file.
+        i_st_options : ort.SessionOptions
+            Runtime options such as optimisation level or profiling flags.
+
+        Returns
+        -------
+        onnxruntime.InferenceSession
+            A ready‑to‑run session configured for the chosen execution provider.
+        """        
 
         if i_s_onnx_path.exists() == False:
             raise Exception(f"cannot find {i_s_onnx_path}")
@@ -149,6 +172,26 @@ class Pipeline:
     # ── IO Binding ─────────────────────────────
 
     def _run(self, i_cl_session, i_aan_input):
+        """
+        Execute an ONNX graph with explicit input/output bindings.
+
+        This method binds all inputs and outputs as ONNX Runtime ``OrtValue`` objects
+        which removes unnecessary copies between CPU and the inference engine.
+        The result is a list of numpy arrays corresponding to the model's output tensors.
+
+        Parameters
+        ----------
+        i_cl_session : onnxruntime.InferenceSession
+            Session representing the graph to run.
+        i_aan_input : Dict[str, np.ndarray]
+            Mapping from input tensor names to their values.
+
+        Returns
+        -------
+        List[np.ndarray]
+            Output tensors as numpy arrays in the order returned by ONNX Runtime.
+        """
+        
         io = i_cl_session.io_binding()
 
         for k, v in i_aan_input.items():
@@ -163,6 +206,21 @@ class Pipeline:
     # ── Encoder ────────────────────────────────
 
     def encode(self, mel):
+        """
+        Run the convolution and transformer encoder on a Mel spectrogram.
+
+        Parameters
+        ----------
+        i_mel : np.ndarray
+            Normalised log‑Mel spectrogram of shape ``(T, N_MELS)``.
+
+        Returns
+        -------
+        tuple(np.ndarray, float)
+            * `audio_feat` – encoded audio features with shape ``(T, HIDDEN_SIZE)``.
+            * `t_elapsed` – wall‑clock time spent in this method.
+        """
+        
         t0 = time.time()
 
         x = mel[np.newaxis, np.newaxis, :, :]
@@ -189,6 +247,25 @@ class Pipeline:
     # ── Prompt ────────────────────────────────
 
     def build_prompt(self, n_audio, language: Optional[str] = None):
+        """
+        Build a token sequence that represents the system/user/assistant messages
+        and includes audio placeholder tokens.
+
+        Parameters
+        ----------
+        i_n_audio : int
+            Number of frames produced by the encoder.  This determines how many
+            ``AUDIO_PAD_ID`` tokens are inserted to make space for the actual audio embeddings.
+        i_language : Optional[str]
+            If provided, a language hint is appended using the format
+            ``"language <lang><asr_text>"``.
+
+        Returns
+        -------
+        List[int]
+            A list of token ids ready to be fed into the decoder.
+        """
+
         ids = [IM_START_ID] + self.cl_tokenizer.encode("system") + [NEWLINE_ID, IM_END_ID, NEWLINE_ID]
 
         ids += [IM_START_ID] + self.cl_tokenizer.encode("user") + [NEWLINE_ID]
@@ -207,6 +284,26 @@ class Pipeline:
         return ids
 
     def embed_inputs(self, ids, audio):
+        """
+        Convert token ids into a tensor of embeddings.
+
+        The audio placeholder tokens are replaced by the actual encoder features.
+        All other tokens are simply mapped to their learned embedding vectors.
+
+        Parameters
+        ----------
+        i_ids : List[int]
+            Token sequence produced by :func:`build_prompt`.
+        i_audio_feat : np.ndarray
+            Encoder output of shape ``(T, HIDDEN_SIZE)`` that will replace the
+            padding placeholders.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape ``(1, N_TOKENS, HIDDEN_SIZE)`` ready to be passed to the decoder.
+        """
+        
         arr = np.array(ids)
         emb = self.ann_embed[arr]
         emb[arr == AUDIO_PAD_ID] = audio
@@ -215,6 +312,26 @@ class Pipeline:
     # ── Transcribe ────────────────────────────
 
     def transcribe(self, path, language=None):
+        """
+        Transcribe an audio file to text using the full inference pipeline.
+
+        Parameters
+        ----------
+        i_s_path : str
+            Path of the input wave.
+        i_language : Optional[str]
+            Language hint that may affect output tokenization.  The model will include a
+            language marker in its output if this argument is provided.
+
+        Returns
+        -------
+        Dict
+            Dictionary with keys:
+
+            * ``text`` – the final decoded transcription string.
+            * ``language`` – detected or requested language (empty if none).
+            * ``timing`` – detailed timing statistics for each pipeline stage.
+        """
 
         total_start = time.time()
 
@@ -322,6 +439,13 @@ class Pipeline:
 # ── CLI ─────────────────────────────────────────────
 
 def main():
+    """
+    Parse command line arguments and run the pipeline for each supplied audio file.
+
+    The script prints a short summary per file, including raw transcription,
+    detected language (if any), and timing statistics.
+    """
+    
     p = argparse.ArgumentParser()
     p.add_argument("audio", nargs="+")
     p.add_argument("--onnx-dir", required=True)
