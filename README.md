@@ -452,13 +452,73 @@ Pipeline ready.
 
 
 
+# Add IO binding to KV cache
 
 
+```cmd
+python qwen3-asr-onnx-v4.py "D:\Data\Project\Project-LLM\Audio Samples\wav\SAMPLE-british-man-7s.wav"  --onnx-dir "D:\LLM_Models\Qwen\Qwen3-ASR-0.6B-ONNX-CPU"
+```
 
 
+<details>
+<summary>CPU</summary>
 
+```
+(.venv) D:\Data\Project\Project-LLM\Runtime ONNX\2026-03-23 ONNX Qwen3 ASR>python qwen3-asr-onnx-v4.py "D:\Data\Project\Project-LLM\Audio Samples\wav\SAMPLE-british-man-7s.wav"  --onnx-dir "D:\LLM_Models\Qwen\Qwen3-ASR-0.6B-ONNX-CPU" 
+Loading encoder_conv | (50 [MB])...
+Loaded in 0.085 [s] 
+Loading encoder_transformer | (701 [MB])...
+Loaded in 0.883 [s] 
+Loading decoder_init.int8 | (598 [MB])...
+Loaded in 1.388 [s] 
+Loading decoder_step.int8 | (598 [MB])...
+Loaded in 1.371 [s] 
+loaded embed tokens bin in 0.169 [s]
+loaded tokenizer 2.064 [s]
+LOADED ALL MODELS IN 5.961
 
+[D:\Data\Project\Project-LLM\Audio Samples\wav\SAMPLE-british-man-7s.wav] (7.4s, RTF 0.56)
+Language: English
+Well, I don't wish to see it any more," observed Phoebe, turning away her eyes. "It is certainly very like the old portrait."     
+mel 0.009s | enc 0.417s | prefill 0.227s | decode 1.411s | tokens 35 | tps 24.8
 
+```
+
+</details>
+
+<details>
+<summary>GPU</summary>
+
+```
+(.venv) D:\Data\Project\Project-LLM\Runtime ONNX\2026-03-23 ONNX Qwen3 ASR>python qwen3-asr-onnx-v4.py "D:\Data\Project\Project-LLM\Audio Samples\wav\SAMPLE-british-man-7s.wav"  --onnx-dir "D:\LLM_Models\Qwen\Qwen3-ASR-0.6B-ONNX-CPU" 
+Loading encoder_conv | (50 [MB])...
+2026-03-27 07:25:42.9787669 [W:onnxruntime:, session_state.cc:1327 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Some nodes were not assigned to the preferred execution providers which may or may not have an negative impact on performance. e.g. ORT explicitly assigns shape related ops to CPU to improve perf.    
+2026-03-27 07:25:42.9899961 [W:onnxruntime:, session_state.cc:1329 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Rerunning with verbose output on a non-minimal build will show node assignments.
+Loaded in 0.874 [s] 
+Loading encoder_transformer | (701 [MB])...
+2026-03-27 07:25:43.3311327 [W:onnxruntime:, session_state.cc:1327 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Some nodes were not assigned to the preferred execution providers which may or may not have an negative impact on performance. e.g. ORT explicitly assigns shape related ops to CPU to improve perf.    
+2026-03-27 07:25:43.3401527 [W:onnxruntime:, session_state.cc:1329 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Rerunning with verbose output on a non-minimal build will show node assignments.
+Loaded in 1.053 [s] 
+Loading decoder_init.int8 | (598 [MB])...
+2026-03-27 07:25:45.1252285 [W:onnxruntime:, session_state.cc:1327 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Some nodes were not assigned to the preferred execution providers which may or may not have an negative impact on performance. e.g. ORT explicitly assigns shape related ops to CPU to improve perf.    
+2026-03-27 07:25:45.1355850 [W:onnxruntime:, session_state.cc:1329 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Rerunning with verbose output on a non-minimal build will show node assignments.
+Loaded in 1.555 [s] 
+Loading decoder_step.int8 | (598 [MB])...
+2026-03-27 07:25:46.6343121 [W:onnxruntime:, session_state.cc:1327 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Some nodes were not assigned to the preferred execution providers which may or may not have an negative impact on performance. e.g. ORT explicitly assigns shape related ops to CPU to improve perf.    
+2026-03-27 07:25:46.6506720 [W:onnxruntime:, session_state.cc:1329 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Rerunning with verbose output on a non-minimal build will show node assignments.
+Loaded in 1.494 [s] 
+loaded embed tokens bin in 0.175 [s]
+loaded tokenizer 2.115 [s]
+LOADED ALL MODELS IN 7.265
+
+[D:\Data\Project\Project-LLM\Audio Samples\wav\SAMPLE-british-man-7s.wav] (7.4s, RTF 1.17)
+Language: English
+Well, I don't wish to see it any more," observed Phoebe, turning away her eyes. It is certainly very like the old portrait.       
+mel 0.008s | enc 0.804s | prefill 1.079s | decode 5.557s | tokens 34 | tps 6.1
+
+```
+
+</details>
 
 
 
