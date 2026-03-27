@@ -452,7 +452,7 @@ Pipeline ready.
 
 
 
-# Add IO binding to KV cache
+# V4 Add IO binding to KV cache (FAIL)
 
 
 ```cmd
@@ -519,6 +519,80 @@ mel 0.008s | enc 0.804s | prefill 1.079s | decode 5.557s | tokens 34 | tps 6.1
 ```
 
 </details>
+
+# V5 
+
+patch some of the KV cache
+
+```cmd
+python qwen3-asr-onnx-v5.py "D:\Data\Project\Project-LLM\Audio Samples\wav\SAMPLE-british-man-7s.wav"  --onnx-dir "D:\LLM_Models\Qwen\Qwen3-ASR-0.6B-ONNX-CPU"
+```
+
+# V6
+
+GPT gets confused
+
+patch the onnx models
+
+```cmd
+python qwen3-asr-onnx-v6.py "D:\Data\Project\Project-LLM\Audio Samples\wav\SAMPLE-british-man-7s.wav"  --onnx-dir "D:\LLM_Models\Qwen\Qwen3-ASR-0.6B-ONNX-CPU"
+```
+
+# V7
+
+bingchat
+
+```cmd
+python qwen3-asr-onnx-v7.py "D:\Data\Project\Project-LLM\Audio Samples\wav\SAMPLE-british-man-7s.wav"  --onnx-dir "D:\LLM_Models\Qwen\Qwen3-ASR-0.6B-ONNX-CPU"
+```
+
+
+```cmd
+(.venv) D:\Data\Project\Project-LLM\Runtime ONNX\2026-03-23 ONNX Qwen3 ASR>python qwen3-asr-onnx-v7.py "D:\Data\Project\Project-LLM\Audio Samples\wav\SAMPLE-british-man-7s.wav"  --onnx-dir "D:\LLM_Models\Qwen\Qwen3-ASR-0.6B-ONNX-CPU"
+Loading encoder_conv | (50 [MB])...
+Loaded in 0.048 [s] 
+Loading encoder_transformer | (701 [MB])...
+Loaded in 0.524 [s] 
+Loading decoder_init.int8 | (598 [MB])...
+Loaded in 0.832 [s] 
+Loading decoder_step.int8 | (598 [MB])...
+Loaded in 0.946 [s] 
+loaded embed tokens bin in 0.176 [s]
+loaded tokenizer 1.163 [s]
+LOADED ALL MODELS IN 3.690
+
+[D:\Data\Project\Project-LLM\Audio Samples\wav\SAMPLE-british-man-7s.wav] (7.4s, RTF 0.31)      
+Language: English
+Well, I don't wish to see it any more," observed Phoebe, turning away her eyes. "It is certainly very like the old portrait."   
+mel 0.006s | enc 0.313s | prefill 0.206s | decode 1.128s | tokens 35 | tps 31.0
+
+(.venv) D:\Data\Project\Project-LLM\Runtime ONNX\2026-03-23 ONNX Qwen3 ASR>python qwen3-asr-onnx-v7.py "D:\Data\Project\Project-LLM\Audio Samples\wav\SAMPLE-british-man-7s.wav"  --onnx-dir "D:\LLM_Models\Qwen\Qwen3-ASR-0.6B-ONNX-CPU"
+Loading encoder_conv | (50 [MB])...
+2026-03-27 12:14:52.4418538 [W:onnxruntime:, session_state.cc:1327 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Some nodes were not assigned to the preferred execution providers which may or may not have an negative impact on performance. e.g. ORT explicitly assigns shape related ops to CPU to improve perf.
+2026-03-27 12:14:52.4473450 [W:onnxruntime:, session_state.cc:1329 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Rerunning with verbose output on a non-minimal build will show node assignments.
+Loaded in 0.192 [s] 
+Loading encoder_transformer | (701 [MB])...
+2026-03-27 12:14:52.5584098 [W:onnxruntime:, session_state.cc:1327 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Some nodes were not assigned to the preferred execution providers which may or may not have an negative impact on performance. e.g. ORT explicitly assigns shape related ops to CPU to improve perf.
+2026-03-27 12:14:52.5635922 [W:onnxruntime:, session_state.cc:1329 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Rerunning with verbose output on a non-minimal build will show node assignments.
+Loaded in 0.702 [s] 
+Loading decoder_init.int8 | (598 [MB])...
+2026-03-27 12:14:53.7359630 [W:onnxruntime:, session_state.cc:1327 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Some nodes were not assigned to the preferred execution providers which may or may not have an negative impact on performance. e.g. ORT explicitly assigns shape related ops to CPU to improve perf.
+2026-03-27 12:14:53.7411025 [W:onnxruntime:, session_state.cc:1329 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Rerunning with verbose output on a non-minimal build will show node assignments.
+Loaded in 0.894 [s] 
+Loading decoder_step.int8 | (598 [MB])...
+2026-03-27 12:14:54.6294418 [W:onnxruntime:, session_state.cc:1327 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Some nodes were not assigned to the preferred execution providers which may or may not have an negative impact on performance. e.g. ORT explicitly assigns shape related ops to CPU to improve perf.
+2026-03-27 12:14:54.6343810 [W:onnxruntime:, session_state.cc:1329 onnxruntime::VerifyEachNodeIsAssignedToAnEp] Rerunning with verbose output on a non-minimal build will show node assignments.
+Loaded in 0.919 [s] 
+loaded embed tokens bin in 0.147 [s]
+loaded tokenizer 1.136 [s]
+LOADED ALL MODELS IN 3.991
+
+[D:\Data\Project\Project-LLM\Audio Samples\wav\SAMPLE-british-man-7s.wav] (7.4s, RTF 0.83)      
+Language: English
+Well, I don't wish to see it any more," observed Phoebe, turning away her eyes. It is certainly very like the old portrait.     
+mel 0.004s | enc 0.700s | prefill 0.983s | decode 3.818s | tokens 34 | tps 8.9
+```cmd
+
 
 
 
